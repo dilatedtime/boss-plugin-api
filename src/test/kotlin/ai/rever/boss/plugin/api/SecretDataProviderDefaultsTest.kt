@@ -50,6 +50,7 @@ class SecretDataProviderDefaultsTest {
         assertEquals("legacy", row.secret.id)
         assertNull(row.orgId)
         assertNull(row.orgSlug)
+        assertNull(row.sharedWithOrgSlug)
         assertFalse(row.isOrgOwned)
         assertFalse(row.canManage)
     }

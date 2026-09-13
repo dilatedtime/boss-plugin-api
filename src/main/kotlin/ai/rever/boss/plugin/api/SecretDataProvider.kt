@@ -271,6 +271,7 @@ data class SecretEntryWithSharingAccessData(
     val secret: SecretEntryWithSharingData,
     val orgId: String? = null,
     val orgSlug: String? = null,
+    val sharedWithOrgSlug: String? = null,
     val isOrgOwned: Boolean = false,
     val canManage: Boolean = false
 )
