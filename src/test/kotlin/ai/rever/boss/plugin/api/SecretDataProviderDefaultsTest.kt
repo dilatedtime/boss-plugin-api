@@ -55,6 +55,19 @@ class SecretDataProviderDefaultsTest {
         assertFalse(row.canManage)
     }
 
+    @Test
+    fun `sharing access envelope retains organisation share attribution`() {
+        val row =
+            SecretEntryWithSharingAccessData(
+                secret = sharingSecret(),
+                sharedWithOrgSlug = "partner-org",
+            )
+
+        assertEquals("partner-org", row.sharedWithOrgSlug)
+        assertNull(row.orgId)
+        assertNull(row.orgSlug)
+    }
+
     private class LegacySecretDataProvider : SecretDataProvider {
         var lastPage: Pair<Int, Int>? = null
         var lastSearch: Triple<String, Int, Int>? = null
@@ -123,6 +136,18 @@ class SecretDataProviderDefaultsTest {
                 password = "secret",
                 createdAt = "then",
                 updatedAt = "now"
+            )
+
+        fun sharingSecret() =
+            SecretEntryWithSharingData(
+                id = "legacy",
+                website = "example.com",
+                username = "user",
+                password = "secret",
+                createdAt = "then",
+                updatedAt = "now",
+                isOwner = false,
+                accessLevel = "read"
             )
     }
 }
