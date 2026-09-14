@@ -1,10 +1,14 @@
 package ai.rever.boss.plugin.api
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class SecretDataProviderDefaultsTest {
     @Test
@@ -68,7 +72,78 @@ class SecretDataProviderDefaultsTest {
         assertNull(row.orgSlug)
     }
 
-    private class LegacySecretDataProvider : SecretDataProvider {
+    @Test
+    fun `all access defaults preserve backend failures`() = runBlocking {
+        val failure = IllegalStateException("backend unavailable")
+        val provider = object : LegacySecretDataProvider() {
+            override suspend fun getUserSecrets(limit: Int, offset: Int): Result<PaginatedSecretsData> =
+                Result.failure(failure)
+            override suspend fun searchSecrets(query: String, limit: Int, offset: Int): Result<PaginatedSecretsData> =
+                Result.failure(failure)
+            override suspend fun getUserSecretsWithSharingInfo(limit: Int, offset: Int): Result<PaginatedSecretsWithSharingData> =
+                Result.failure(failure)
+            override suspend fun getSecretShares(secretId: String): Result<List<SecretShareData>> =
+                Result.failure(failure)
+        }
+        assertSame(failure, provider.getUserSecretsWithAccess().exceptionOrNull())
+        assertSame(failure, provider.searchSecretsWithAccess("query").exceptionOrNull())
+        assertSame(failure, provider.getUserSecretsWithSharingAccess().exceptionOrNull())
+        assertSame(failure, provider.getSecretSharesWithTargets("secret").exceptionOrNull())
+    }
+
+    @Test
+    fun `access defaults do not swallow coroutine cancellation`() = runBlocking {
+        val cancellation = CancellationException("cancelled")
+        val provider = object : LegacySecretDataProvider() {
+            override suspend fun getUserSecrets(limit: Int, offset: Int): Result<PaginatedSecretsData> = throw cancellation
+            override suspend fun searchSecrets(query: String, limit: Int, offset: Int): Result<PaginatedSecretsData> = throw cancellation
+            override suspend fun getUserSecretsWithSharingInfo(limit: Int, offset: Int): Result<PaginatedSecretsWithSharingData> = throw cancellation
+            override suspend fun getSecretShares(secretId: String): Result<List<SecretShareData>> = throw cancellation
+        }
+        assertSame(cancellation, assertFailsWith<CancellationException> { provider.getUserSecretsWithAccess() })
+        assertSame(cancellation, assertFailsWith<CancellationException> { provider.searchSecretsWithAccess("query") })
+        assertSame(cancellation, assertFailsWith<CancellationException> { provider.getUserSecretsWithSharingAccess() })
+        assertSame(cancellation, assertFailsWith<CancellationException> { provider.getSecretSharesWithTargets("secret") })
+    }
+
+    @Test
+    fun `legacy owner rows cannot grant management and sharing pagination survives`() = runBlocking {
+        val owner = sharingSecret().copy(isOwner = true, accessLevel = "owner")
+        val provider = object : LegacySecretDataProvider() {
+            override suspend fun getUserSecretsWithSharingInfo(limit: Int, offset: Int): Result<PaginatedSecretsWithSharingData> {
+                assertEquals(3 to 8, limit to offset)
+                return Result.success(PaginatedSecretsWithSharingData(listOf(owner), hasMore = true))
+            }
+        }
+        val page = provider.getUserSecretsWithSharingAccess(3, 8).getOrThrow()
+        assertTrue(page.hasMore)
+        assertSame(owner, page.data.single().secret)
+        assertFalse(page.data.single().canManage)
+    }
+
+    @Test
+    fun `empty pages with continuation retain pagination`() = runBlocking {
+        val provider = object : LegacySecretDataProvider() {
+            override suspend fun getUserSecrets(limit: Int, offset: Int): Result<PaginatedSecretsData> =
+                Result.success(PaginatedSecretsData(emptyList(), hasMore = true))
+            override suspend fun searchSecrets(query: String, limit: Int, offset: Int): Result<PaginatedSecretsData> =
+                Result.success(PaginatedSecretsData(emptyList(), hasMore = true))
+        }
+        for (page in listOf(provider.getUserSecretsWithAccess().getOrThrow(), provider.searchSecretsWithAccess("query").getOrThrow())) {
+            assertTrue(page.hasMore)
+            assertTrue(page.data.isEmpty())
+        }
+    }
+
+    @Test
+    fun `access members have real JVM defaults for legacy implementations`() {
+        for (name in listOf("getUserSecretsWithAccess", "searchSecretsWithAccess", "getUserSecretsWithSharingAccess", "getSecretSharesWithTargets")) {
+            val method = SecretDataProvider::class.java.declaredMethods.single { it.name.startsWith("$name-") && !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            assertTrue(method.isDefault, "$name must remain a JVM default method")
+        }
+    }
+
+    private open class LegacySecretDataProvider : SecretDataProvider {
         var lastPage: Pair<Int, Int>? = null
         var lastSearch: Triple<String, Int, Int>? = null
 

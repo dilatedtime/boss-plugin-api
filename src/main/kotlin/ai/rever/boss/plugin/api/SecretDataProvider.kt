@@ -5,7 +5,14 @@ package ai.rever.boss.plugin.api
  *
  * This interface abstracts secret management functionality to allow
  * the SecretManager panel to be extracted to a separate module.
+ *
+ * The host compiles this interface in and serves it parent-first. The access-aware
+ * members require a BossConsole release containing them and a matching consumer
+ * `minBossVersion`; updating the API jar alone cannot add them to an older host.
+ * The new envelope types also require `minApiVersion` for the API release containing
+ * them. Default bodies support legacy implementations once the interface is available.
  */
+@HostImplemented
 interface SecretDataProvider {
     /**
      * Get all secrets for the current user with pagination.
@@ -16,9 +23,10 @@ interface SecretDataProvider {
      * Get secrets together with the server-authoritative organisation ownership and
      * management decision for each row.
      *
-     * The default is deliberately fail-closed. An older host still returns the rows so
+     * The default is deliberately fail-closed. A legacy implementation returns the rows so
      * a consumer can render and copy them, but it must not infer an edit permission the
-     * server did not publish. Hosts that support organisation secrets override this.
+     * server did not publish, even for legacy owner rows. Hosts that support organisation
+     * secrets override this; mutation authorization must still be enforced server-side.
      */
     suspend fun getUserSecretsWithAccess(
         limit: Int = 50,
