@@ -3,6 +3,8 @@
 The SDK every BOSS plugin compiles against, and the bundled system plugin that serves it at
 runtime.
 
+This repository is a fork of [risa-labs-inc/boss-plugin-api](https://github.com/risa-labs-inc/boss-plugin-api).
+
 A plugin depends on this as `compileOnly` and never bundles it. The host owns the copy that is
 actually loaded, which is what keeps a plugin built against an older SDK working on a newer
 BOSS.
